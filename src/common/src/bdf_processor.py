@@ -4,7 +4,8 @@ from pulse_publisher import PulsePublisher
 import matplotlib.pyplot as plt
 import numpy as np
 import pyedflib
-import rospy
+#import rclpy
+#from rclpy.node import Node
 
 
 class BdfProcessor:
@@ -17,12 +18,12 @@ class BdfProcessor:
         self.frequency = None
         self.heart_rates = None
         self.total_average_heart_rate = None
-        self.publisher = PulsePublisher("ecg")
+        self.publisher = PulsePublisher(self, "ecg")
 
     def run(self):
         self.signal, self.frequency = self.get_signal(name='EXG2')
         self.total_average_heart_rate, self.peaks = self.estimate_average_heartrate(self.signal, self.frequency)
-        rospy.loginfo("[BdfProcessor] Total average heart rate: " + str(self.total_average_heart_rate))
+        print("[BdfProcessor] Total average heart rate: " + str(self.total_average_heart_rate))
         self.heart_rates = self.calculate_heart_rates(self.peaks, self.frequency)
 
         # Uncomment to plot the ECG signal

@@ -7,13 +7,34 @@ from pulse_publisher import PulsePublisher
 import sys
 import numpy as np
 import time
-import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.logging import LoggingSeverity
 import matplotlib.pyplot as plt
 
 
-class LegacyMeasurement(object):
+class LegacyMeasurement(Node):
 
     def __init__(self, is_video):
+        super().__init__("legacy_measurement")
+        self.get_logger().set_level(LoggingSeverity.DEBUG)
+
+        # Get ROS topic from launch parameter
+        self.input_topic = self.declare_parameter("~input_topic", "/webcam/image_raw").value
+        self.get_logger().info("[LegacyMeasurement] Listening on topic '" + self.input_topic + "'")
+
+        self.video_file = self.declare_parameter("~video_file", None).value
+        self.get_logger().info("[LegacyMeasurement] Video file input: '" + str(self.video_file) + "'")
+
+        self.bdf_file = self.declare_parameter("~bdf_file", "").value
+        self.get_logger().info("[LegacyMeasurement] Bdf file: '" + str(self.bdf_file) + "'")
+
+        self.cascade_file = self.declare_parameter("~cascade_file", "").value
+        self.get_logger().info("[LegacyMeasurement] Cascade file: '" + str(self.cascade_file) + "'")
+
+        self.show_image_frame = self.declare_parameter("~show_image_frame", False).value
+        self.get_logger().info("[LegacyMeasurement] Show image frame: '" + str(self.show_image_frame) + "'")
+
         self.is_video = is_video
         self.fps = 0
         self.buffer_size = 250
@@ -29,7 +50,7 @@ class LegacyMeasurement(object):
         self.MAX_BPM = 150
         self.MIN_BPM = 40
         self.pulse_sequence = 0
-        self.publisher = PulsePublisher("legacy_measurement")
+        self.publisher = PulsePublisher(self, "legacy_measurement")
         self.publish_count = 0
 
     def on_image_frame(self, roi, timestamp):
@@ -103,7 +124,7 @@ class LegacyMeasurement(object):
                 self.bpm = self.freqs[idx2]
                 self.bpms.append(self.bpm)
                 self.publisher.publish(self.bpm, timestamp)
-                rospy.loginfo("[LegacyMeasurement] BPM: " + str(self.bpm))
+                self.get_logger().info("[LegacyMeasurement] BPM: " + str(self.bpm))
 
         self.samples = processed
 
@@ -135,36 +156,19 @@ class LegacyMeasurement(object):
 
 
 def main():
-    rospy.init_node("legacy_measurement", anonymous=False, log_level=rospy.DEBUG)
-
-    # Get ROS topic from launch parameter
-    input_topic = rospy.get_param("~input_topic", "/webcam/image_raw")
-    rospy.loginfo("[LegacyMeasurement] Listening on topic '" + input_topic + "'")
-
-    video_file = rospy.get_param("~video_file", None)
-    rospy.loginfo("[LegacyMeasurement] Video file input: '" + str(video_file) + "'")
-
-    bdf_file = rospy.get_param("~bdf_file", "")
-    rospy.loginfo("[LegacyMeasurement] Bdf file: '" + str(bdf_file) + "'")
-
-    cascade_file = rospy.get_param("~cascade_file", "")
-    rospy.loginfo("[LegacyMeasurement] Cascade file: '" + str(cascade_file) + "'")
-
-    show_image_frame = rospy.get_param("~show_image_frame", False)
-    rospy.loginfo("[LegacyMeasurement] Show image frame: '" + str(show_image_frame) + "'")
+    rclpy.init(args=sys.argv)
 
     # Start heart rate measurement
-    is_video = video_file != ""
-    pulse_measurement = LegacyMeasurement(is_video)
+    pulse_measurement = LegacyMeasurement(is_video=None)
+    pulse_measurement.is_video = pulse_measurement.video_file != ""
 
-    face_detector = FaceDetector(input_topic, cascade_file)
+    face_detector = FaceDetector(pulse_measurement.input_topic, pulse_measurement.cascade_file)
     face_detector.bottom_face_callback = pulse_measurement.on_image_frame
-    face_detector.run(video_file, bdf_file, show_image_frame)
+    face_detector.run(pulse_measurement.video_file, pulse_measurement.bdf_file, pulse_measurement.show_image_frame)
 
-    rospy.spin()
-    rospy.loginfo("[LegacyMeasurement] Shutting down")
+    rclpy.spin(pulse_measurement)
+    pulse_measurement.get_logger().info("[LegacyMeasurement] Shutting down")
 
 
 if __name__ == '__main__':
-    sys.argv = rospy.myargv()
     main()

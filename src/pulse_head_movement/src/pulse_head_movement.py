@@ -6,7 +6,9 @@ __version__ = "0.1.1"
 import sys
 import numpy as np
 import cv2
-import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.logging import LoggingSeverity
 from scipy import interpolate
 from scipy import stats
 from scipy import fftpack
@@ -39,14 +41,34 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     return y
 
 
-class PulseHeadMovement:
+class PulseHeadMovement(Node):
 
     def __init__(self):
         """
         Constructor.
         """
+        super().__init__("head_movement_listener")
+
+        self.array_full_logged = False
+        self.get_logger().set_level(LoggingSeverity.DEBUG)
+
+        # get ROS topic from launch parameter
+        self.input_topic = self.declare_parameter("~input_topic", "/webcam/image_raw").value
+        self.get_logger().info("[PulseHeadMovement] Listening on topic '" + self.input_topic + "'")
+
+        self.video_file = self.declare_parameter("~video_file", None).value
+        self.get_logger().info("[PulseHeadMovement] Video file input: '" + str(self.video_file) + "'")
+
+        self.bdf_file = self.declare_parameter("~bdf_file", "").value
+        self.get_logger().info("[PulseHeadMovement] Bdf file: '" + str(self.bdf_file) + "'")
+
+        self.cascade_file = self.declare_parameter("~cascade_file", "").value
+        self.get_logger().info("[PulseHeadMovement] Cascade file: '" + str(self.cascade_file) + "'")
+
+        self.show_image_frame = self.declare_parameter("~show_image_frame", False).value
+        self.get_logger().info("[PulseHeadMovement] Show image frame: '" + str(self.show_image_frame) + "'")
         # set up publisher
-        self.publisher = PulsePublisher("pulse_head_movement")
+        self.publisher = PulsePublisher(self, "pulse_head_movement")
         # sequence of published pulse values, published with each pulse message
         self.published_pulse_value_sequence = 0
         # previous image is needed for lucas kanade optical flow tracker (see calculate_optical_flow method)
@@ -172,10 +194,12 @@ class PulseHeadMovement:
         """
         if len(self.buffer_points) < self.refresh_rate/self.publish_rate:
             # as the buffer is not full, there are no points yet to process.
-            rospy.loginfo("[PulseHeadMovement] array not full yet ")
+            self.get_logger().info("[PulseHeadMovement] array not full yet ")
         else:
             # process points on the last array position
-            rospy.loginfo_once("ARRAY FULL: HEADMOVEMENT READY")
+            if not self.array_full_logged:
+                self.get_logger().info("ARRAY FULL: HEADMOVEMENT READY")
+                self.array_full_logged = True
             self.buffer_points.pop()
             points_calculate_pulse = self.buffered_y_tracking_signal.pop()
             current_time_array = self.buffered_time_arrays.pop()
@@ -216,7 +240,7 @@ class PulseHeadMovement:
         timespan = time_array[-1]-time_array[0]
         fps = self.refresh_rate/timespan
         self.fps = fps
-        rospy.loginfo("[PulseHeadMovement] Estimated FPS: " + str(fps) + " (Measured timespan: " + str(timespan) + "s)")
+        self.get_logger().info("[PulseHeadMovement] Estimated FPS: " + str(fps) + " (Measured timespan: " + str(timespan) + "s)")
 
     def remove_erratic_trajectories(self, y_tracking_signal):
         """
@@ -281,7 +305,7 @@ class PulseHeadMovement:
         :param time_array:
         """
         sample_rate = len(input_signal[0])/(time_array[-1]-time_array[0])
-        rospy.loginfo("[PulseHeadMovement] sample rate: "+str(sample_rate))
+        self.get_logger().info("[PulseHeadMovement] sample rate: "+str(sample_rate))
         lowcut = 0.85
         highcut = 5
         filtered_signal = np.empty([np.size(input_signal, 0), np.size(input_signal, 1)])
@@ -404,7 +428,7 @@ class PulseHeadMovement:
         pulse = (len(peaks) / measured_time) * 60
         # pulse = np.int16(pulse)
         roundPulse=round(pulse)
-        rospy.loginfo("[PulseHeadMovement] Pulse: " + str(roundPulse))
+        self.get_logger().info("[PulseHeadMovement] Pulse: " + str(roundPulse))
         # uncomment the following lines to see the final singal with the detected peaks. For debugging.
         # stepsize = 1. / sample_rate
         # xs = np.arange(time_array[0], time_array[-1], stepsize)
@@ -440,38 +464,21 @@ def main():
     Main.
     Get topic to listen to from launch file and starts main loop in with pulse.run().
     """
-    rospy.init_node("head_movement_listener", anonymous=False, log_level=rospy.DEBUG)
-
-    # Get ROS topic from launch parameter
-    input_topic = rospy.get_param("~input_topic", "/webcam/image_raw")
-    rospy.loginfo("[PulseHeadMovement] Listening on topic '" + input_topic + "'")
-
-    video_file = rospy.get_param("~video_file", None)
-    rospy.loginfo("[PulseHeadMovement] Video file input: '" + str(video_file) + "'")
-
-    bdf_file = rospy.get_param("~bdf_file", "")
-    rospy.loginfo("[PulseHeadMovement] Bdf file: '" + str(bdf_file) + "'")
-
-    cascade_file = rospy.get_param("~cascade_file", "")
-    rospy.loginfo("[PulseHeadMovement] Cascade file: '" + str(cascade_file) + "'")
-
-    show_image_frame = rospy.get_param("~show_image_frame", False)
-    rospy.loginfo("[PulseHeadMovement] Show image frame: '" + str(show_image_frame) + "'")
+    rclpy.init(args=sys.argv)
 
     # Start heart rate measurement
     pulse = PulseHeadMovement()
     # show_image_frame = True für zweites Bild mit Rechtecken
-    face_detector = FaceDetector(input_topic, cascade_file)
+    face_detector = FaceDetector(pulse.input_topic, pulse.cascade_file)
     face_detector.mask_callback = pulse.pulse_callback
-    face_detector.run(video_file, bdf_file, show_image_frame)
+    face_detector.run(pulse.video_file, pulse.bdf_file, pulse.show_image_frame)
 
-    rospy.spin()
-    rospy.loginfo("[PulseHeadMovement] Shutting down")
+    rclpy.spin(pulse)
+    pulse.get_logger().info("[PulseHeadMovement] Shutting down")
 
     # Destroy windows on close
     cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    sys.argv = rospy.myargv()
     main()

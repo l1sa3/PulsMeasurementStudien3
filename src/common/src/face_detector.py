@@ -2,8 +2,8 @@
 from video_input import VideoInput
 
 import cv2
-import rospy
 import numpy as np
+import logging
 
 
 class FaceDetector:
@@ -60,7 +60,7 @@ class FaceDetector:
 
         # Show original image, if no faces are detected
         if len(faces) is 0:
-            rospy.loginfo("[FaceDetector] No faces detected!")
+            logging.info("[FaceDetector] No faces detected!")
 
             if self.show_image_frame is True:
                 cv2.imshow("Image", gray_scale_image)

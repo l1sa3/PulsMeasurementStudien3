@@ -3,15 +3,16 @@ from datetime import datetime
 
 import csv
 import os
-import rospy
+import rclpy
 
 
 class PulsePublisher:
 
-    def __init__(self, name):
+    def __init__(self, node, name):
+        self.node = node
         self.name = name
         self.topic = "/" + name
-        self.publisher = rospy.Publisher(self.topic, Pulse, queue_size=10)
+        self.publisher = self.node.create_publisher(Pulse, self.topic, queue_size=10)
         self.sequence = 0
         self.date = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -21,7 +22,7 @@ class PulsePublisher:
         :param pulse: The pulse value to publish in ROS and to write into a csv file.
         :param timestamp: The timestamp corresponding to the pulse value.
         """
-        rospy.loginfo("[PulsePublisher] Publishing pulse ('" + self.topic + "'): " + str(pulse))
+        self.node.get_logger().info("[PulsePublisher] Publishing pulse ('" + self.topic + "'): " + str(pulse))
         self.publish_to_ros(pulse, timestamp)
         self.write_to_csv(pulse, timestamp)
 

@@ -6,17 +6,22 @@ __version__ = "0.1.1"
 from common.msg import Pulse
 from common.msg import Error
 from datetime import datetime
+from rclpy import Node
+from rclpy.logging import LoggingSeverity
 import sys
-import rospy
+import rclpy
 import csv
 import os
 
 
-class ComparePulseValues:
+class ComparePulseValues(Node):
 
     def __init__(self, topic, topic_to_compare):
+        super.__init__('compare')
+
+        self.get_logger().set_level(LoggingSeverity.DEBUG)
         # set up ROS publisher
-        self.pub = rospy.Publisher('/compare_pulse_values', Error, queue_size=10)
+        self.pub = self.create_publisher(Error, '/compare_pulse_values', Error, queue_size=10)
         # sequence of published error values, published with each error message
         self.published_error_value_sequence = 0
         self.topic = topic
@@ -24,16 +29,18 @@ class ComparePulseValues:
         self.pulse = None
         self.pulseToCompare = None
         self.error = None
-        self.start_time = rospy.Time.now()
+        self.start_time = self.get_clock().now()
         self.date = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
     def run(self):
-        rospy.Subscriber(self.topic, Pulse, self.pulse_callback)
-        rospy.Subscriber(self.topic_to_compare, Pulse, self.pulse_to_compare_callback)
+        self.subscriper_topic = self.create_subscription(Pulse, self.topic, self.pulse_callback)
+        #rospy.Subscriber(self.topic, Pulse, self.pulse_callback)
+        self.subscriper_topic_compare = self.create_subscription(Pulse, self.topic_to_compare, self.pulse_to_compare_callback)
+        #rospy.Subscriber(self.topic_to_compare, Pulse, self.pulse_to_compare_callback)
         try:
-            rospy.spin()
+            rclpy.spin(self)
         except KeyboardInterrupt:
-            rospy.loginfo("Shutting down")
+            self.get_logger().info("Shutting down")
 
     def pulse_callback(self, pulse):
         self.calculate_error(topic=True, pulse=pulse)
@@ -56,7 +63,8 @@ class ComparePulseValues:
         if self.pulseToCompare is not None and self.pulse is not None:
             absolute_error = abs(self.pulseToCompare - self.pulse)
             self.error = (absolute_error / self.pulse) * 100
-            timestamp = rospy.Time.now() - self.start_time
+            timestamp = self.get_clock().now() - self.start_time
+            #timestamp = rospy.Time.now() - self.start_time
             self.publish_error(timestamp)
             self.write_to_csv(timestamp)
 
@@ -65,7 +73,8 @@ class ComparePulseValues:
         Publishes the error percentage into ROS.
         :param timestamp: The timestamp of the published ROS"=Message.
         """
-        rospy.loginfo("[ComparePulseValues] Calculated error: " + str(self.error))
+        #rospy.loginfo("[ComparePulseValues] Calculated error: " + str(self.error))
+        self.get_logger().info("[ComparePulseValues] Calculated error: " + str(self.error))
         msg_to_publish = Error()
         msg_to_publish.error = self.error
         msg_to_publish.time.stamp = timestamp
@@ -106,18 +115,19 @@ class ComparePulseValues:
 
 
 def main():
-    rospy.init_node("compare", anonymous=False, log_level=rospy.DEBUG)
+    rclpy.init(args=sys.argv)
+    node = rclpy.create_node("compare", anonymous=False, log_level=rclpy.DEBUG)
+    #rospy.init_node("compare", anonymous=False, log_level=rospy.DEBUG)
 
-    topic = rospy.get_param("~topic", "/pulse_chest_strap")
-    rospy.loginfo("[ComparePulseValues] Listening on topic '" + topic + "'")
+    topic = node.declare_parameter("~topic", "/pulse_chest_strap").value
+    node.get_logger().info("[ComparePulseValues] Listening on topic '" + topic + "'")
 
-    topic_to_compare = rospy.get_param("~topic_to_compare", "/pulse_head_movement/pulse")
-    rospy.loginfo("[ComparePulseValues] Listening on topic '" + topic_to_compare + "'")
+    topic_to_compare = node.declare_parameter("~topic_to_compare", "/pulse_head_movement/pulse").value
+    node.get_logger().info("[ComparePulseValues] Listening on topic '" + topic_to_compare + "'")
 
     pulse = ComparePulseValues(topic, topic_to_compare)
     pulse.run()
 
 
 if __name__ == "__main__":
-    sys.argv = rospy.myargv()
     main()

@@ -4,13 +4,16 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 
 import cv2
-import rospy
+import rclpy
 import time
+from rclpy import Node
+from rclpy.time import Time
+from rclpy.duration import Duration
 
-
-class VideoInput:
+class VideoInput(Node):
 
     def __init__(self, topic, cascade_file):
+        super.__init__('video_input_node')
         self.topic = topic
         self.cascade_file = cascade_file
         self.bridge = CvBridge()
@@ -33,7 +36,7 @@ class VideoInput:
             self.bdf_processor.run()
 
         self.fps_start_time = time.time()
-        self.start_time = rospy.Time.now()
+        self.start_time = self.get_clock().now()
 
         if self.video_file:
             # Creates an OpenCV VideoCapture out of the provided video file
@@ -43,13 +46,14 @@ class VideoInput:
             self.video_duration = self.total_video_frames / float(self.video_fps)
 
             # Processes each video frame until the video ended or ROS is shutdown
-            while capture.isOpened() and not rospy.is_shutdown() and self.frame_count < self.total_video_frames:
+            while capture.isOpened() and rclpy.ok() and self.frame_count < self.total_video_frames:
                 ret, frame = capture.read()
                 self.on_image_frame(frame, convert=False)
 
             capture.release()
+
         else:
-            rospy.Subscriber(self.topic, Image, self.on_image_frame)
+            self.subscriper = self.create_subscription(Image, self.topic, self.on_image_frame)
 
     def on_image_frame(self, data, convert=True):
         """
@@ -66,7 +70,7 @@ class VideoInput:
                 # When image date comes from ROS topic, it first has to be converted into an OpenCV image
                 cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
             except CvBridgeError as e:
-                rospy.logerr(e)
+                self.get_logger().error(str(e))
                 return
         else:
             # Image frame is coming from a video and therefore is already in an OpenCV format
@@ -88,7 +92,7 @@ class VideoInput:
             fps_end_time = time.time()
             seconds = fps_end_time - self.fps_start_time
             fps = 60 / seconds
-            rospy.loginfo("[VideoInput] Estimated FPS: " + str(fps) + " (Measured timespan: " + str(seconds) + "s)")
+            self.get_logger().info("[VideoInput] Estimated FPS: " + str(fps) + " (Measured timespan: " + str(seconds) + "s)")
             self.fps_start_time = time.time()
 
     def get_timestamp(self):
@@ -98,8 +102,8 @@ class VideoInput:
          Otherwise it will return the time since the class was initialized.
         """
         if not self.video_file:
-            return rospy.Time.now() - self.start_time
+            return (self.get_clock().now() - self.start_time).nanoseconds / 1e9
 
         percentage = self.frame_count / float(self.total_video_frames)
         offset = (percentage * self.video_duration)
-        return rospy.Time.from_sec(0) + rospy.Duration.from_sec(offset)
+        return Time(seconds=0) + Duration(seconds=offset)

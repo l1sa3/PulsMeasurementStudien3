@@ -6,7 +6,9 @@ import sys
 import time
 import pexpect
 import argparse
-import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.logging import LoggingSeverity
 
 from pulse_publisher import PulsePublisher
 
@@ -14,8 +16,10 @@ from pulse_publisher import PulsePublisher
 class PulseChestStrap:
 
     def __init__(self):
-        self.publisher = PulsePublisher("pulse_chest_strap")
-        self.start_time = rospy.Time.now()
+        super().__init__("pulse_chest_strap")
+        self.get_logger().set_level(LoggingSeverity.DEBUG)
+        self.publisher = PulsePublisher(self, "pulse_chest_strap")
+        self.start_time = self.get_clock.now()
 
     def run(self, addr=None, gatttool="gatttool"):
         """
@@ -26,7 +30,7 @@ class PulseChestStrap:
 
         if addr is None:
             # A mac address has to be provided as command line argument
-            rospy.logerr("[PulseChestStrap] MAC address of polar H7 has not been provided")
+            self.get_logger().error("[PulseChestStrap] MAC address of polar H7 has not been provided")
             return
 
         hr_handle = None
@@ -35,7 +39,7 @@ class PulseChestStrap:
         while retry:
 
             while 1:
-                rospy.loginfo("[PulseChestStrap] Establishing connection to " + addr)
+                self.get_logger().info("[PulseChestStrap] Establishing connection to " + addr)
                 gt = pexpect.spawn(gatttool + " -b " + addr + " -I")
 
                 gt.expect(r"\[LE\]>")
@@ -46,11 +50,11 @@ class PulseChestStrap:
                         gt.expect(r"\[LE\]>", timeout=30)
 
                 except pexpect.TIMEOUT:
-                    rospy.loginfo("[PulseChestStrap] Connection timeout. Retrying.")
+                    self.get_logger().info("[PulseChestStrap] Connection timeout. Retrying.")
                     continue
 
                 except KeyboardInterrupt:
-                    rospy.loginfo("[PulseChestStrap] Received keyboard interrupt. Quitting cleanly.")
+                    self.get_logger().info("[PulseChestStrap] Received keyboard interrupt. Quitting cleanly.")
                     retry = False
                     break
                 break
@@ -58,7 +62,7 @@ class PulseChestStrap:
             if not retry:
                 break
 
-            rospy.loginfo("[PulseChestStrap] Connected to " + addr)
+            self.get_logger().info("[PulseChestStrap] Connected to " + addr)
 
             # We determine which handle we should read for getting the heart rate
             # measurement characteristic.
@@ -80,7 +84,7 @@ class PulseChestStrap:
                     hr_handle = handle
 
             if hr_handle is None:
-                rospy.logerr("[PulseChestStrap] Couldn't find the heart rate measurement handle?!")
+                self.get_logger().error("[PulseChestStrap] Couldn't find the heart rate measurement handle?!")
                 return
 
             if hr_ctl_handle:
@@ -99,7 +103,7 @@ class PulseChestStrap:
                 except pexpect.TIMEOUT:
                     # If the timer expires, it means that we have lost the
                     # connection with the HR monitor
-                    rospy.logwarn("[PulseChestStrap] Connection lost with " + addr + ". Reconnecting.")
+                    self.get_logger().warn("[PulseChestStrap] Connection lost with " + addr + ". Reconnecting.")
                     gt.sendline("quit")
                     try:
                         gt.wait()
@@ -109,7 +113,7 @@ class PulseChestStrap:
                     break
 
                 except KeyboardInterrupt:
-                    rospy.loginfo("[PulseChestStrap] Received keyboard interrupt. Quitting cleanly.")
+                    self.get_logger().info("[PulseChestStrap] Received keyboard interrupt. Quitting cleanly.")
                     retry = False
                     break
 
@@ -126,8 +130,10 @@ class PulseChestStrap:
                 data = list(data)
                 res = self.interpret(data)
 
-                rospy.loginfo("[PulseChestStrap] Heart rate: " + str(res["hr"]))
-                self.publisher.publish(res["hr"], rospy.Time.now() - self.start_time)
+                self.get_logger().info("[PulseChestStrap] Heart rate: " + str(res["hr"]))
+                # todo unsicher wegen nanoseconds / 1e9 (Duration muss in Sekunden umgewandelt werden)
+                timestamp = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
+                self.publisher.publish(res["hr"], timestamp)
                 seq += 1
 
         # We quit close the BLE connection properly
@@ -192,21 +198,25 @@ def main():
     Entry point for the command line interface
     """
     # set up ROS node
-    rospy.init_node("pulse_chest_strap", anonymous=False, disable_signals=True)
+    # todo hier war vorher noch disable_signals=True, wie gehen wir damit in ROS2 um?
+    rclpy.init(args=sys.argv)
     args = parse_args()
 
     if args.g != "gatttool" and not os.path.exists(args.g):
-        rospy.logerr("[PulseChestStrap] Couldn't find gatttool path!")
+        # todo prüfen ob print hier erlaubt
+        print("[PulseChestStrap] Couldn't find gatttool path!", file=sys.stderr)
         sys.exit(1)
 
     pulse_chest_strap = PulseChestStrap()
 
     try:
         pulse_chest_strap.run(addr=args.m, gatttool=args.g)
-    except rospy.ROSInterruptException:
+    except KeyboardInterrupt:
         pass
+    finally:
+        pulse_chest_strap.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":
-    sys.argv = rospy.myargv()
     main()
