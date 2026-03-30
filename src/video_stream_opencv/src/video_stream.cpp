@@ -81,8 +81,8 @@ virtual sensor_msgs::CameraInfo get_default_camera_info_from_image(sensor_msgs::
     // Fill image size
     cam_info_msg.height = img->height;
     cam_info_msg.width = img->width;
-    NODELET_INFO_STREAM("The image width is: " << img->width);
-    NODELET_INFO_STREAM("The image height is: " << img->height);
+    RCLCPP_INFO_(this->get_logger(), "The image width is: %d", img->width);
+    RCLCPP_INFO_(this->get_logger(), "The image height is: %d", img->height);
     // Add the most common distortion model as sensor_msgs/CameraInfo says
     cam_info_msg.distortion_model = "plumb_bob";
     // Don't let distorsion matrix be empty
@@ -104,7 +104,7 @@ virtual sensor_msgs::CameraInfo get_default_camera_info_from_image(sensor_msgs::
 
 
 virtual void do_capture() {
-    NODELET_DEBUG("Capture thread started");
+    RCLCPP_DEBUG(this->get_logger(), "Capture thread started");
     cv::Mat frame;
     VideoStreamConfig latest_config = config;
     ros::Rate camera_fps_rate(latest_config.set_camera_fps);
@@ -118,14 +118,14 @@ virtual void do_capture() {
           latest_config = config;
         }
         if (!cap->isOpened()) {
-          NODELET_WARN("Waiting for device...");
+          RCLCPP_WARN(this->get_logger(), "Waiting for device...");
           cv::waitKey(100);
           continue;
         }
         if (!cap->read(frame)) {
-          NODELET_ERROR("Could not capture frame");
+          RCLCPP_ERROR(this->get.logger(), "Could not capture frame");
           if (latest_config.reopen_on_read_failure) {
-            NODELET_WARN("trying to reopen the device");
+            RCLCPP_WARN(this->get_logger(), "trying to reopen the device");
             unsubscribe();
             subscribe();
           }
@@ -145,7 +145,7 @@ virtual void do_capture() {
                 frame_counter = 0;
             }
             else {
-              NODELET_INFO("Reached the end of frames");
+              RCLCPP_INFO(this->get_logger(), "Reached the end of frames");
               break;
             }
         }
@@ -159,7 +159,7 @@ virtual void do_capture() {
             framesQueue.push(frame.clone());
         }
     }
-    NODELET_DEBUG("Capture thread finished");
+    RCLCPP_DEBUG(this->get_logger(), "Capture thread finished");
 }
 
 virtual void do_publish(const ros::TimerEvent& event) {
@@ -204,18 +204,21 @@ virtual void do_publish(const ros::TimerEvent& event) {
             // https://github.com/ros-perception/vision_opencv/blob/melodic/cv_bridge/include/cv_bridge/cv_bridge.h#L247
             cv_image = cv_bridge::cvtColor(cv_image, latest_config.output_encoding);
           } catch (std::runtime_error &ex) {
-            NODELET_ERROR_STREAM("cannot change encoding to " << latest_config.output_encoding
-                                 << ": " << ex.what());
+            RCLCPP_ERROR(
+              this->get_logger(), 
+              "cannot change encoding to %s: %s",
+              latest_config.output_encoding.c_str(),
+              ex.what());
           }
         }
         msg = cv_image->toImageMsg();
         // Create a default camera info if we didn't get a stored one on initialization
         if (cam_info_msg.distortion_model == ""){
-            NODELET_WARN_STREAM("No calibration file given, publishing a reasonable default camera info.");
+            RCLCPP_WARN(this->get_logger(), "No calibration file given, publishing a reasonable default camera info.");
             cam_info_msg = get_default_camera_info_from_image(msg);
         }
         // The timestamps are in sync thanks to this publisher
-        pub.publish(*msg, cam_info_msg, ros::Time::now());
+        pub.publish(*msg, cam_info_msg, rclcpp::Time::now());
     }
 }
 
@@ -233,30 +236,30 @@ virtual void subscribe() {
   cap.reset(new cv::VideoCapture);
   try {
     int device_num = std::stoi(video_stream_provider);
-    NODELET_INFO_STREAM("Opening VideoCapture with provider: /dev/video" << device_num);
+    RCLCPP_INFO(this->get_logger(), "Opening VideoCapture with provider: /dev/video%d", device_num);
     cap->open(device_num);
   } catch (std::invalid_argument &ex) {
-    NODELET_INFO_STREAM("Opening VideoCapture with provider: " << video_stream_provider);
+    RCLCPP_INFO(this->get_logger(), "Opening VideoCapture with provider: %s", video_stream_provider.c_str());
     cap->open(video_stream_provider);
     if (!cap->isOpened()) {
-      NODELET_FATAL_STREAM("Invalid 'video_stream_provider': " << video_stream_provider);
+      RCLCPP_FATAL(this->get_logger(), "Invalid 'video_stream_provider': %s", video_stream_provider.c_str());
       return;
     }
   }
-  NODELET_INFO_STREAM("Video stream provider type detected: " << video_stream_provider_type);
+  RCLCPP_INFO(this->get_logger(), "Video stream provider type detected: %s" << video_stream_provider_type);
 
   double reported_camera_fps;
   // OpenCV 2.4 returns -1 (instead of a 0 as the spec says) and prompts an error
   // HIGHGUI ERROR: V4L2: Unable to get property <unknown property string>(5) - Invalid argument
   reported_camera_fps = cap->get(cv::CAP_PROP_FPS);
   if (reported_camera_fps > 0.0)
-    NODELET_INFO_STREAM("Camera reports FPS: " << reported_camera_fps);
+    RCLCPP_INFO(this->get_logger(), "Camera reports FPS: %f", reported_camera_fps);
   else
-    NODELET_INFO_STREAM("Backend can't provide camera FPS information");
+    RCLCPP_INFO(this->get_logger(), "Backend can't provide camera FPS information");
 
   cap->set(cv::CAP_PROP_FPS, latest_config.set_camera_fps);
   if(!cap->isOpened()){
-    NODELET_ERROR_STREAM("Could not open the stream.");
+    RCLCPP_ERROR(this->get_logger(), "Could not open the stream.");
     return;
   }
   if (latest_config.width != 0 && latest_config.height != 0){
@@ -283,7 +286,7 @@ virtual void subscribe() {
     publish_timer = nh->createTimer(
       ros::Duration(1.0 / latest_config.fps), &VideoStreamNodelet::do_publish, this);
   } catch (std::exception& e) {
-    NODELET_ERROR_STREAM("Failed to start capture thread: " << e.what());
+    RCLCPP_ERROR(this->get_logger(), "Failed to start capture thread: %s", e.what());
   }
 }
 
@@ -334,13 +337,16 @@ virtual void infoDisconnectionCallback(const ros::SingleSubscriberPublisher&) {
 }
 
 virtual void configCallback(VideoStreamConfig& new_config, uint32_t level) {
-  NODELET_DEBUG("configCallback");
+  RCLCPP_DEBUG("configCallback");
 
   if (new_config.fps > new_config.set_camera_fps) {
     NODELET_WARN_STREAM(
-        "Asked to publish at 'fps' (" << new_config.fps
-        << ") which is higher than the 'set_camera_fps' (" << new_config.set_camera_fps <<
-        "), we can't publish faster than the camera provides images.");
+      this->get_logger(),
+      "Asked to publish at 'fps' (%f) which is higher than the 'set_camera_fps' (%f), we can't publish 
+      faster than the camera provides images.", 
+      new_config.fps, 
+      new_config.set_camera_fps
+    );
     new_config.fps = new_config.set_camera_fps;
   }
 
@@ -351,18 +357,18 @@ virtual void configCallback(VideoStreamConfig& new_config, uint32_t level) {
   }
 
   // show current configuration
-  NODELET_INFO_STREAM("Camera name: " << new_config.camera_name);
-  NODELET_INFO_STREAM("Provided camera_info_url: '" << new_config.camera_info_url << "'");
-  NODELET_INFO_STREAM("Publishing with frame_id: " << new_config.frame_id);
-  NODELET_INFO_STREAM("Setting camera FPS to: " << new_config.set_camera_fps);
-  NODELET_INFO_STREAM("Throttling to fps: " << new_config.fps);
-  NODELET_INFO_STREAM("Setting buffer size for capturing frames to: " << new_config.buffer_queue_size);
-  NODELET_INFO_STREAM("Flip horizontal image is: " << ((new_config.flip_horizontal)?"true":"false"));
-  NODELET_INFO_STREAM("Flip vertical image is: " << ((new_config.flip_vertical)?"true":"false"));
+  RCLCPP_INFO(this->get_logger(), "Camera name: %s", new_config.camera_name.c_str());
+  RCLCPP_INFO(this->get_logger(), "Provided camera_info_url: '%s'", new_config.camera_info_url.c_str());
+  RCLCPP_INFO(this->get_logger(), "Publishing with frame_id: %s", new_config.frame_id.c_str());
+  RCLCPP_INFO(this->get_logger(), "Setting camera FPS to: %f", new_config.set_camera_fps);
+  RCLCPP_INFO(this->get_logger(), "Throttling to fps: %f", new_config.fps);
+  RCLCPP_INFO(this->get_logger(), "Setting buffer size for capturing frames to: %d", new_config.buffer_queue_size);
+  RCLCPP_INFO(this->get_logger(), "Flip horizontal image is: %s", new_config.flip_horizontal ? "true" : "false");
+  RCLCPP_INFO(this->get_logger(), "Flip vertical image is: %s", new_config.flip_vertical ? "true" : "false");
   if (new_config.width != 0 && new_config.height != 0)
   {
-    NODELET_INFO_STREAM("Forced image width is: " << new_config.width);
-    NODELET_INFO_STREAM("Forced image height is: " << new_config.height);
+    RCLCPP_INFO(this->get_logger(), "Forced image width is: %d", new_config.width);
+    RCLCPP_INFO(this->get_logger(), "Forced image height is: %d", new_config.height);
   }
 
   if (subscriber_num > 0 && (level & 0x1))
