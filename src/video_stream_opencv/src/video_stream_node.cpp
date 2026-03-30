@@ -1,9 +1,10 @@
-#include <ros/ros.h>
+#include "rclcpp/rclcpp.hpp"
 #include <nodelet/loader.h>
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "video_stream");
+    //ros::init(argc, argv, "video_stream");
+    rclcpp:init(argc, argv)
 
     nodelet::Loader manager(true);
     nodelet::M_string remappings;

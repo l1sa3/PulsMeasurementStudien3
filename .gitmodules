@@ -4,6 +4,7 @@
 [submodule "src/video_stream_opencv"]
 	path = src/video_stream_opencv
 	url = https://github.com/ros-drivers/video_stream_opencv.git
-[submodule "src/pylon-ros-camera"]
-	path = src/pylon-ros-camera
+[submodule "src/pylon_ros2_camera"]
+	path = src/pylon_ros2_camera
 	url = https://github.com/basler/pylon-ros-camera.git
+	branch = humble

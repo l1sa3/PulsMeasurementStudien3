@@ -34,7 +34,7 @@
  * @author Sammy Pfeiffer
  */
 
-#include <ros/ros.h>
+#include "rclcpp/rclcpp.hpp"
 #include <nodelet/nodelet.h>
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
