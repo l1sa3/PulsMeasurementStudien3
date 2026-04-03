@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
         print ("  It can be a number as video device, e.g.: 0 would be /dev/video0")
         print ("  It can be a url of a stream,        e.g.: rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mov")
         print ("  It can be a video file,             e.g.: myvideo.mkv")
-        exit(0)
+        sys.exit(0)
 
     resource = sys.argv[1]
     # If we are given just a number, interpret it as a video device
@@ -32,12 +32,12 @@ if __name__ == '__main__':
         resource = int(resource)
     else:
         resource_name = resource
-    print ("Trying to open resource: ") + resource_name
+    print ("Trying to open resource: " + resource_name)
     cap = cv2.VideoCapture(resource)
     if not cap.isOpened():
-        print ("Error opening resource: ") + str(resource)
+        print ("Error opening resource: " + str(resource))
         print ("Maybe opencv VideoCapture can't open it")
-        exit(0)
+        sys.exit(0)
 
     print ("Correctly opened resource, starting to show feed.")
     rval, frame = cap.read()
@@ -49,5 +49,6 @@ if __name__ == '__main__':
         # exit on ESC, you may want to uncomment the print to know which key is ESC for you
         if key == 27 or key == 1048603:
             break
-    cv2.destroyWindow("preview")
 
+    cap.release()    
+    cv2.destroyAllWindows()
