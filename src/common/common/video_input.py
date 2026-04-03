@@ -88,7 +88,7 @@ class VideoInput(Node):
         """
         Calculates the fps of the program every 60 frames and prints it to the console
         """
-        if self.frame_count % 60 is 0:
+        if self.frame_count % 60 == 0:
             fps_end_time = time.time()
             seconds = fps_end_time - self.fps_start_time
             fps = 60 / seconds

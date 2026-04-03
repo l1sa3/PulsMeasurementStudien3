@@ -59,7 +59,7 @@ class FaceDetector:
         )
 
         # Show original image, if no faces are detected
-        if len(faces) is 0:
+        if len(faces) == 0:
             logging.info("[FaceDetector] No faces detected!")
 
             if self.show_image_frame is True:
@@ -156,7 +156,7 @@ class FaceDetector:
         :param faces: Rectangles of the detected faces
         :return: The biggest face found, if one exists
         """
-        if len(faces) is 1:
+        if len(faces) == 1:
             return faces[0]
 
         biggest_face = None
