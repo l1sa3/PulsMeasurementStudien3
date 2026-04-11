@@ -1,5 +1,5 @@
 from mne.preprocessing.ecg import qrs_detector
-from pulse_publisher import PulsePublisher
+from common.pulse_publisher import PulsePublisher
 
 import matplotlib.pyplot as plt
 import numpy as np

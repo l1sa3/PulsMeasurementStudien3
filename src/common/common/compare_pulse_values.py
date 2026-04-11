@@ -3,8 +3,8 @@
 
 __version__ = "0.1.1"
 
-from common.msg import Pulse
-from common.msg import Error
+from pulse_interfaces.msg import Pulse
+from pulse_interfaces.msg import Error
 from datetime import datetime
 from rclpy import Node
 from rclpy.logging import LoggingSeverity

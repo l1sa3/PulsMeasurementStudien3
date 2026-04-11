@@ -51,6 +51,7 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <exec_depend>pulse_interfaces</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

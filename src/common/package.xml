@@ -62,7 +62,7 @@
   <exec_depend>sensor_msgs</exec_depend>
 
   <exec_depend>rosidl_default_runtime</exec_depend>
-
+  <exec_depend>pulse_interfaces</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

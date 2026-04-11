@@ -26,7 +26,7 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'node = pulse_head_movement.pulse_head_movement:main',
+            'pulse_head_movement = pulse_head_movement.pulse_head_movement:main',
         ],
     },
 )

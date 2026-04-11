@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-from video_input import VideoInput
+from common.video_input import VideoInput
 
 import cv2
 import numpy as np
 import logging
+import os
 
 
 class FaceDetector:
@@ -40,7 +41,16 @@ class FaceDetector:
         
 
         # Create the haar cascade
-        face_cascade = cv2.CascadeClassifier(self.cascade_file)
+        if self.cascade_file:
+            cascade_path = self.cascade_file
+        else:
+            cascade_path = "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
+
+        if not os.path.exists(cascade_path):
+            logging.error("[FaceDetector] Cascade file not found: " + cascade_path)
+            return
+
+        face_cascade = cv2.CascadeClassifier(cascade_path)
 
         # Calculate the min and max face size to be detected
         # Because input frames can be of different sizes, this is calculated dynamically on the first image callback

@@ -27,11 +27,11 @@ setup(
 
     entry_points={
      'console_scripts': [
-         'node1 = common.bdf_processor:main',
-         'node2 = common.compare_pulse_values:main',
-         'node3 = common.face_detector:main',
-         'node4 = common.pulse_publisher:main',
-         'node5 = common.video_input:main',
+         'bdf_processor.py = common.bdf_processor:main',
+         'compare_pulse_values.py = common.compare_pulse_values:main',
+         'face_detector.py = common.face_detector:main',
+         'pulse_publisher.py = common.pulse_publisher:main',
+         'video_input.py = common.video_input:main',
      ],
      },  
 )

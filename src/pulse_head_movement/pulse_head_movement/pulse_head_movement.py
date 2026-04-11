@@ -17,9 +17,9 @@ from scipy.signal import butter, lfilter, filtfilt, find_peaks, welch
 from sklearn.decomposition import PCA
 import pandas as pd
 import matplotlib.pyplot as plt
-from face_detector import FaceDetector
-from pulse_publisher import PulsePublisher
-from common.msg import Pulse
+from common.face_detector import FaceDetector
+from common.pulse_publisher import PulsePublisher
+from pulse_interfaces.msg import Pulse
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
@@ -53,19 +53,19 @@ class PulseHeadMovement(Node):
         self.get_logger().set_level(LoggingSeverity.DEBUG)
 
         # get ROS topic from launch parameter
-        self.input_topic = self.declare_parameter("~input_topic", "/webcam/image_raw").value
+        self.input_topic = self.declare_parameter("input_topic", "/webcam/image_raw").value
         self.get_logger().info("[PulseHeadMovement] Listening on topic '" + self.input_topic + "'")
 
-        self.video_file = self.declare_parameter("~video_file", None).value
+        self.video_file = self.declare_parameter("video_file", "").value
         self.get_logger().info("[PulseHeadMovement] Video file input: '" + str(self.video_file) + "'")
 
-        self.bdf_file = self.declare_parameter("~bdf_file", "").value
+        self.bdf_file = self.declare_parameter("bdf_file", "").value
         self.get_logger().info("[PulseHeadMovement] Bdf file: '" + str(self.bdf_file) + "'")
 
-        self.cascade_file = self.declare_parameter("~cascade_file", "").value
+        self.cascade_file = self.declare_parameter("cascade_file", "").value
         self.get_logger().info("[PulseHeadMovement] Cascade file: '" + str(self.cascade_file) + "'")
 
-        self.show_image_frame = self.declare_parameter("~show_image_frame", False).value
+        self.show_image_frame = self.declare_parameter("show_image_frame", False).value
         self.get_logger().info("[PulseHeadMovement] Show image frame: '" + str(self.show_image_frame) + "'")
         # set up publisher
         self.publisher = PulsePublisher(self, "pulse_head_movement")
@@ -108,7 +108,15 @@ class PulseHeadMovement(Node):
                                                          and mask for forehead)
         """
         # rospy.loginfo("Capture frame: " + str(self.frame_index))
-        self.get_current_tracking_points_position(original_image, time.to_sec())
+        time_msg = time.to_msg()
+        t_sec = time_msg.sec + time_msg.nanosec * 1e-9
+
+        self.get_current_tracking_points_position(original_image, t_sec)
+        if self.frame_index % self.publish_rate == 0:
+            self.add_new_points_to_buffer(original_image, forehead_mask, bottom_mask, t_sec)
+        self.frame_index += 1
+        self.previous_image = original_image
+
         if self.frame_index % self.publish_rate == 0:
             self.add_new_points_to_buffer(original_image, forehead_mask, bottom_mask, time)
         self.frame_index += 1
@@ -222,16 +230,76 @@ class PulseHeadMovement(Node):
         :param time_array: the time of the single positions of the points tracked
         :param publish_time: the timestamp for the ros message to publish the pulse value
         """
+        # Sanity checks
+        if y_tracking_signal is None or len(y_tracking_signal) == 0:
+            self.get_logger().warning("[PulseHeadMovement] No tracking signal to process")
+            return
+        if time_array is None or len(time_array) < 2:
+            self.get_logger().warning("[PulseHeadMovement] Time array too short")
+            return
+
         self.calculate_fps(time_array)
+
         stable_signal = self.remove_erratic_trajectories(y_tracking_signal)
+        if stable_signal.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] No stable signal after trajectory filtering")
+            return
+
+        # Clean time_array: only finite values, and length must match signal length
+        time_array = np.array(time_array)
+        if not np.all(np.isfinite(time_array)):
+            finite_mask = np.isfinite(time_array)
+            time_array = time_array[finite_mask]
+            # also trim stable_signal columns to same length
+            if stable_signal.shape[1] > time_array.shape[0]:
+                stable_signal = stable_signal[:, :time_array.shape[0]]
+
+        if time_array.size < 2:
+            self.get_logger().warning("[PulseHeadMovement] Time array has less than 2 finite samples")
+            return 
+
+        # Ensure strictly increasing time axis
+        sort_idx = np.argsort(time_array)
+        time_array = time_array[sort_idx]
+        stable_signal = stable_signal[:, sort_idx]
+        # Remove duplicate time stamps (required for CubicSpline)
+        unique_mask = np.diff(time_array, prepend=time_array[0]-1) > 0
+        time_array = time_array[unique_mask]
+        stable_signal = stable_signal[:, unique_mask]
+
+        if time_array.size < 2:
+            self.get_logger().warning("[PulseHeadMovement] Time array has less than 2 unique samples after sorting")
+            return
+
         interpolated_points = self.interpolate_points(stable_signal, time_array)
+        if interpolated_points.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] No interpolated points available")
+            return
+
         filtered_signal = self.apply_butterworth_filter(interpolated_points, time_array)
+        if filtered_signal.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] No filtered signal available")
+            return
+
         less_movement = self.discard_much_movement(filtered_signal)
+        if less_movement.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] No signal left after movement discard")
+            return
+
         pca_array = self.process_PCA(less_movement, time_array)
+        if pca_array.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] PCA returned empty result")
+            return
+
         signal, frequency = self.find_most_periodic_signal(pca_array, time_array)
+        if signal is None or frequency == 0:
+            self.get_logger().warning("[PulseHeadMovement] No periodic signal found")
+            return
+
         pulse = self.calculate_pulse(signal, frequency, time_array)
         self.publish_pulse(pulse, publish_time)
         return
+
 
     def calculate_fps(self, time_array):
         """
@@ -246,25 +314,54 @@ class PulseHeadMovement(Node):
         """
         Some feature points behave unstable. This method removes outliers.
         """
+        # If there is no data at all
+        if y_tracking_signal is None or len(y_tracking_signal) == 0:
+            return np.array([])
+
+        # Filter out rows that contain NaN/Inf
+        clean_rows = []
+        for row in y_tracking_signal:
+            if np.all(np.isfinite(row)):
+                clean_rows.append(row)
+
+        if len(clean_rows) == 0:
+            return np.array([])
+
+        y_tracking_signal = np.array(clean_rows)
+
         stable_signal = []
         rounded_signal = np.rint(y_tracking_signal)
         y_point_distance = np.diff(rounded_signal)
         y_point_distance = np.absolute(y_point_distance)
-        # get the maximum distance for each point
+
+        # If diff produced no distances
+        if y_point_distance.size == 0:
+            return np.array([])
+
+        # Get the maximum distance for each point
         max_distances = list(map(lambda diff: np.amax(diff), y_point_distance))
-        mode, _ = stats.mode(max_distances)
-        # only keep the points with max_distance equal or lower than the mode
+
+        if len(max_distances) == 0:
+            return np.array([])
+
+        # SciPy-compatible mode call
+        mode_result = stats.mode(max_distances, keepdims=True)
+        mode_value = mode_result.mode[0]
+
+        # Only keep the points with max_distance equal or lower than the mode
         for point_index, point in enumerate(y_tracking_signal):
-            if max_distances[point_index] <= mode[0]:
+            if max_distances[point_index] <= mode_value:
                 stable_signal.append(point)
+
         stable_signal = np.array(stable_signal)
-        # uncomment the following lines to see the maximum distances each point has moved. For debugging.
+        # Uncomment the following lines to see the maximum distances each point has moved. For debugging.
         # xs = np.arange(len(max_distances))
         # filename = "/home/studienarbeit/Dokumente/" + str(self.seq) + "max_distance"
         # plt.figure(figsize=(6.5, 4))
         # plt.plot(xs, max_distances, label="S")
         # plt.savefig(filename)
         return stable_signal
+        
 
     def interpolate_points(self, y_tracking_signal, time_array):
         """
@@ -274,29 +371,84 @@ class PulseHeadMovement(Node):
         :param y_tracking_signal: the signal resulting from remove_erratic_trajectories
         :param time_array:
         """
-        # uncomment the following lines to see the signal before  interpolation
+
+        time_array = np.array(time_array)
+        if time_array.size < 2 or not np.all(np.isfinite(time_array)):
+            self.get_logger().warning("[PulseHeadMovement] Invalid time_array in interpolate_points")
+            return np.array([])
+
+        # uncomment the following lines to see the signal before interpolation
         # for a random point (i.e. at position 6). For debugging.
         # filename = "/home/studienarbeit/Dokumente/" + str(self.published_pulse_value_sequence) + "_step1_before_interp_move_signal_"
         # plt.figure(figsize=(6.5, 4))
         # plt.plot(time_array, y_tracking_signal[6], label="S")
         # plt.savefig(filename)
         # plt.close()
+
         sample_rate = 250
-        stepsize = 1./sample_rate
-        interpolated_time = np.arange(time_array[0], time_array[-1], stepsize)
+        stepsize = 1. / sample_rate
+
+        duration = time_array[-1] - time_array[0]
+        if duration <= 0 or not np.isfinite(duration):
+            self.get_logger().warning("[PulseHeadMovement] Invalid duration in interpolate_points")
+            return np.array([])
+
+        max_duration = 60.0  # seconds, Sicherheitsgrenze
+        if duration > max_duration:
+            self.get_logger().warning(
+                f"[PulseHeadMovement] Duration too large ({duration}s), clamping to {max_duration}s"
+            )
+            end_time = time_array[0] + max_duration
+        else:
+            end_time = time_array[-1]
+
+        interpolated_time = np.arange(time_array[0], end_time, stepsize)
+        if interpolated_time.size == 0:
+            self.get_logger().warning("[PulseHeadMovement] No points in interpolated_time")
+            return np.array([])
+
         interpolated_points = np.empty([np.size(y_tracking_signal, 0), np.size(interpolated_time)])
+
+        valid_row_index = 0
         for point_index, row in enumerate(y_tracking_signal):
-            interpolation = CubicSpline(time_array, row)
-            array_interpolated = interpolation(interpolated_time)
-            for interpolated_point_index, point in enumerate(array_interpolated):
-                interpolated_points[point_index][interpolated_point_index] = point
+            # skip rows with NaN/Inf
+            if not np.all(np.isfinite(row)):
+                continue
+
+            # skip rows with insane jumps (very large finite differences)
+            diffs = np.diff(row)
+            if diffs.size == 0 or not np.all(np.isfinite(diffs)):
+                continue
+            if np.max(np.abs(diffs)) > 1e6:
+                continue
+
+            try:
+                interpolation = CubicSpline(time_array, row)
+                array_interpolated = interpolation(interpolated_time)
+            except ValueError as e:
+                self.get_logger().warning(
+                    f"[PulseHeadMovement] Skipping row {point_index} in interpolate_points: {str(e)}"
+                )
+                continue
+
+            interpolated_points[valid_row_index] = array_interpolated
+            valid_row_index += 1
+
+        if valid_row_index == 0:
+            self.get_logger().warning("[PulseHeadMovement] No valid rows for interpolation")
+            return np.array([])
+
+        interpolated_points = interpolated_points[:valid_row_index, :]
+
         # uncomment the following lines to see the interpolated signal
         # for a random point (i.e. at position 6). For debugging.
         # filename = "/home/studienarbeit/Dokumente/" + str(self.published_pulse_value_sequence) + "_step2_move_signal_"
         # plt.figure(figsize=(6.5, 4))
         # plt.plot(interpolated_time, interpolated_points[6], label="S")
         # plt.savefig(filename)
+
         return interpolated_points
+
 
     def apply_butterworth_filter(self, input_signal, time_array):
         """
@@ -345,16 +497,32 @@ class PulseHeadMovement(Node):
                 filtered_signal[filtered_signal_index] = row
                 filtered_signal_index += 1
         return filtered_signal
-
+    
     def process_PCA(self, filtered_signal, time_array):
         """
         process PCA to get the 5 main movement directions of the signal.
         :param filtered_signal: the signal resulting from discard_much_movement
         :param time_array:
         """
+        # Remove rows that contain NaN/Inf before PCA
+        clean_rows = []
+        for row in filtered_signal:
+            if np.all(np.isfinite(row)):
+                clean_rows.append(row)
+        if len(clean_rows) == 0:
+            self.get_logger().warning("[PulseHeadMovement] No valid rows for PCA (all NaN/Inf)")
+            return np.array([])
+
+        filtered_signal = np.array(clean_rows)
+
         filtered_signal_transposed = filtered_signal.transpose()
         pca = PCA(n_components=5)
-        pca_array = pca.fit_transform(filtered_signal_transposed)
+        try:
+            pca_array = pca.fit_transform(filtered_signal_transposed)
+        except ValueError as e:
+            self.get_logger().warning(f"[PulseHeadMovement] PCA failed: {str(e)}")
+            return np.array([])
+
         pca_array = pca_array.transpose()
         # uncomment the following lines to see the signal after PCA. For debugging.
         # filename = "/home/studienarbeit/Dokumente/" + str(self.published_pulse_value_sequence) + "_step4_pca_signal_"
@@ -427,7 +595,7 @@ class PulseHeadMovement(Node):
         measured_time = time_array[-1] - time_array[0]
         pulse = (len(peaks) / measured_time) * 60
         # pulse = np.int16(pulse)
-        roundPulse=round(pulse)
+        roundPulse=float(round(pulse))
         self.get_logger().info("[PulseHeadMovement] Pulse: " + str(roundPulse))
         # uncomment the following lines to see the final singal with the detected peaks. For debugging.
         # stepsize = 1. / sample_rate

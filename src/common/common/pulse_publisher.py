@@ -1,5 +1,6 @@
-from common.msg import Pulse
+from pulse_interfaces.msg import Pulse
 from datetime import datetime
+from builtin_interfaces.msg import Time
 
 import csv
 import os
@@ -12,7 +13,7 @@ class PulsePublisher:
         self.node = node
         self.name = name
         self.topic = "/" + name
-        self.publisher = self.node.create_publisher(Pulse, self.topic, queue_size=10)
+        self.publisher = self.node.create_publisher(Pulse, self.topic, 10)
         self.sequence = 0
         self.date = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -33,9 +34,13 @@ class PulsePublisher:
         :param timestamp: The timestamp corresponding to the pulse value.
         """
         ros_msg = Pulse()
-        ros_msg.pulse = pulse
-        ros_msg.time.stamp = timestamp
-        ros_msg.time.seq = self.sequence
+        ros_msg.pulse = float(pulse)
+        sec = int(timestamp)
+        nanosec = int((timestamp - sec) * 1e9)
+
+        ros_msg.time.stamp.sec = sec
+        ros_msg.time.stamp.nanosec = nanosec
+        ros_msg.time.frame_id = ""  # optional
 
         self.publisher.publish(ros_msg)
         self.sequence += 1

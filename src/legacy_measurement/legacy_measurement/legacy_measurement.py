@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 from scipy import signal
-from face_detector import FaceDetector
+from common.face_detector import FaceDetector
 from pulse_publisher import PulsePublisher
 
 import sys

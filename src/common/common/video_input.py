@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-from bdf_processor import BdfProcessor
+from common.bdf_processor import BdfProcessor
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 
 import cv2
 import rclpy
 import time
-from rclpy import Node
+from rclpy.node import Node
 from rclpy.time import Time
 from rclpy.duration import Duration
 
 class VideoInput(Node):
 
     def __init__(self, topic, cascade_file):
-        super.__init__('video_input_node')
+        super().__init__('video_input_node')
         self.topic = topic
         self.cascade_file = cascade_file
         self.bridge = CvBridge()
@@ -53,7 +53,7 @@ class VideoInput(Node):
             capture.release()
 
         else:
-            self.subscriper = self.create_subscription(Image, self.topic, self.on_image_frame)
+            self.subscriper = self.create_subscription(Image, self.topic, self.on_image_frame, 10)
 
     def on_image_frame(self, data, convert=True):
         """

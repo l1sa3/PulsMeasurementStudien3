@@ -52,6 +52,8 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>common</exec_depend>
+  <exec_depend>scikit-learn</exec_depend>
+  <exec_depend>pulse_interfaces</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

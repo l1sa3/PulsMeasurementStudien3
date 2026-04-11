@@ -11,8 +11,8 @@ import sys
 
 import scipy.fftpack as fftpack
 from scipy.signal import find_peaks
-from face_detector import FaceDetector
-from pulse_publisher import PulsePublisher
+from common.face_detector import FaceDetector
+from common.pulse_publisher import PulsePublisher
 
 
 def build_gaussian_pyramid(frame, level=3):
