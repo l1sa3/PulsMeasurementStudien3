@@ -106,6 +106,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+install/
 lib/
 lib64/
 parts/
@@ -113,6 +114,7 @@ sdist/
 var/
 wheels/
 pip-wheel-metadata/
+pulse_measurement/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
