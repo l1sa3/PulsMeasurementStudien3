@@ -1,6 +1,6 @@
-matplotlib
-numpy
-# opencv-python
-pandas
-scikit-learn
-scipy
+matplotlib==3.10.8
+numpy==1.24.4
+opencv-python==4.5.4
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.15.3
