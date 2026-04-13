@@ -117,10 +117,6 @@ class PulseHeadMovement(Node):
         self.frame_index += 1
         self.previous_image = original_image
 
-        if self.frame_index % self.publish_rate == 0:
-            self.add_new_points_to_buffer(original_image, forehead_mask, bottom_mask, time)
-        self.frame_index += 1
-        self.previous_image = original_image
 
     def get_current_tracking_points_position(self, current_image, time):
         """
