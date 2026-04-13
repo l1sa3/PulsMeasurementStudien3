@@ -73,7 +73,7 @@ def amplify_video(filtered_video, amplify):
     return amplification_array
 
 
-def calculate_pulse(self, processed_video, recorded_time, show_processed_image):
+def calculate_pulse(logger, processed_video, recorded_time, show_processed_image):
     """
     The processed images, saved in processed_video, is used as the data basis to calculate the pulse.
     For the actual calculation, only the red values are needed. Therefore these are extracted with the method
@@ -93,7 +93,7 @@ def calculate_pulse(self, processed_video, recorded_time, show_processed_image):
     peaks, _ = find_peaks(red_values)
     pulse = (len(peaks) / float(recorded_time)) * 60
     pulse = np.int16(pulse)
-    self.get_logger().info("[EulerianMotionMagnification] Pulse: " + str(pulse))
+    logger.info("[EulerianMotionMagnification] Pulse: " + str(pulse))
     return pulse, red_values
 
 
@@ -158,22 +158,22 @@ class PulseMeasurement(Node):
         self.get_logger().set_level(LoggingSeverity.DEBUG)
 
         # Get ROS topic from launch parameter
-        self.input_topic = self.declare_parameter("~input_topic", "/webcam/image_raw").value
+        self.input_topic = self.declare_parameter("input_topic", "/webcam/image_raw").value
         self.get_logger().info("[EulerianMotionMagnification] Listening on topic '" + self.input_topic + "'")
 
-        self.video_file = self.declare_parameter("~video_file", None).value
+        self.video_file = self.declare_parameter("video_file", "").value
         self.get_logger().info("[EulerianMotionMagnification] Video file input: '" + str(self.video_file) + "'")
 
-        self.bdf_file = self.declare_parameter("~bdf_file", "").value
+        self.bdf_file = self.declare_parameter("bdf_file", "").value
         self.get_logger().info("[EulerianMotionMagnification] Bdf file: '" + str(self.bdf_file) + "'")
 
-        self.cascade_file = self.declare_parameter("~cascade_file", "").value
+        self.cascade_file = self.declare_parameter("cascade_file", "").value
         self.get_logger().info("[EulerianMotionMagnification] Cascade file: '" + str(self.cascade_file) + "'")
 
-        self.show_image_frame = self.declare_parameter("~show_image_frame", False).value
+        self.show_image_frame = self.declare_parameter("show_image_frame", False).value
         self.get_logger().info("[EulerianMotionMagnification] Show image frame: '" + str(self.show_image_frame) + "'")
 
-        self.show_processed_image = self.declare_parameter("~show_processed_image", False).value
+        self.show_processed_image = self.declare_parameter("show_processed_image", False).value
         self.get_logger().info("[EulerianMotionMagnification] Show processed frame: '" + str(self.show_processed_image) + "'")
 
         self.count = 0
@@ -200,7 +200,7 @@ class PulseMeasurement(Node):
         in array) and last timestamp (last image in array)
         """
         time_difference = self.time_array[-1] - self.time_array[0]
-        time_difference_in_seconds = time_difference.to_sec()
+        time_difference_in_seconds = time_difference.nanoseconds / 1e9
         if time_difference_in_seconds == 0:
             pass
         self.fps = self.buffer_size / time_difference_in_seconds
@@ -223,7 +223,7 @@ class PulseMeasurement(Node):
             self.video_array.append(red_values_images)
         # check if recording images took longer than certain amount of time
         time_difference = self.time_array[-1] - self.time_array[0]
-        time_difference_in_seconds = time_difference.to_sec()
+        time_difference_in_seconds = time_difference.nanoseconds / 1e9
         if time_difference_in_seconds >= self.recording_time:
             self.buffer_size = (len(self.time_array))
             # determine how many pictures got buffered during time interval
@@ -244,7 +244,7 @@ class PulseMeasurement(Node):
                     show_images(processed_video, self.video_array, self.arrayLength, self.isFirst, self.levels, self.calculating_border, self.fps)
                 else:
                     copy_video_array = amplify_video(copy_video_array, amplify=self.amplification)
-                pulse, red_values = self.calculate_pulse(copy_video_array, self.recording_time, self.show_processed_image)
+                pulse, red_values = calculate_pulse(self.get_logger(), copy_video_array, self.recording_time, self.show_processed_image)
                 self.publisher.publish(pulse, timestamp)
                 self.calculating_at = 0
                 self.isFirst = False
@@ -253,8 +253,10 @@ class PulseMeasurement(Node):
 def main():
     rclpy.init(args=sys.argv)
 
-    pulse_processor = PulseMeasurement()
-
+    # ToDo: prüfen, ob man es so hartcodiert lassen kann?
+    show_processed_image = False
+    pulse_processor = PulseMeasurement(show_processed_image)
+    
     face_detector = FaceDetector(pulse_processor.input_topic, pulse_processor.cascade_file)
     face_detector.face_callback = pulse_processor.start_calulation
     face_detector.run(pulse_processor.video_file, pulse_processor.bdf_file, pulse_processor.show_image_frame)

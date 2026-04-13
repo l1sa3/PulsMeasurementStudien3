@@ -35,8 +35,16 @@ class PulsePublisher:
         """
         ros_msg = Pulse()
         ros_msg.pulse = float(pulse)
-        sec = int(timestamp)
-        nanosec = int((timestamp - sec) * 1e9)
+        
+        # ROS1-compatible: either float or rclpy.Time
+        if isinstance(timestamp, (int, float)):
+            sec = int (timestamp)
+            nanosec = int ((timestamp - sec) * 1e9)
+        else:
+            # rclpy.Time -> seconds/nanoseconds
+            time_msg = timestamp.to_msg()
+            sec = time_msg.sec
+            nanosec = time_msg.nanosec
 
         ros_msg.time.stamp.sec = sec
         ros_msg.time.stamp.nanosec = nanosec

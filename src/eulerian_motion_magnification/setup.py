@@ -25,7 +25,7 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'node = eulerian_motion_magnification.eulerian_motion_magnification:main',
+            'eulerian_motion_magnification = eulerian_motion_magnification.eulerian_motion_magnification:main',
         ],
     },
 )
