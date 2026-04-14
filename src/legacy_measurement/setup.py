@@ -28,7 +28,7 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'node = legacy_measurement.legacy_measurement:main',
+            'legacy_measurement = legacy_measurement.legacy_measurement:main',
         ],
     },
 )

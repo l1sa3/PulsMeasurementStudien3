@@ -2,7 +2,7 @@
 from __future__ import print_function
 from scipy import signal
 from common.face_detector import FaceDetector
-from pulse_publisher import PulsePublisher
+from common.pulse_publisher import PulsePublisher
 
 import sys
 import numpy as np
@@ -20,19 +20,19 @@ class LegacyMeasurement(Node):
         self.get_logger().set_level(LoggingSeverity.DEBUG)
 
         # Get ROS topic from launch parameter
-        self.input_topic = self.declare_parameter("~input_topic", "/webcam/image_raw").value
+        self.input_topic = self.declare_parameter("input_topic", "/webcam/image_raw").value
         self.get_logger().info("[LegacyMeasurement] Listening on topic '" + self.input_topic + "'")
 
-        self.video_file = self.declare_parameter("~video_file", None).value
+        self.video_file = self.declare_parameter("video_file", "").value
         self.get_logger().info("[LegacyMeasurement] Video file input: '" + str(self.video_file) + "'")
 
-        self.bdf_file = self.declare_parameter("~bdf_file", "").value
+        self.bdf_file = self.declare_parameter("bdf_file", "").value
         self.get_logger().info("[LegacyMeasurement] Bdf file: '" + str(self.bdf_file) + "'")
 
-        self.cascade_file = self.declare_parameter("~cascade_file", "").value
+        self.cascade_file = self.declare_parameter("cascade_file", "").value
         self.get_logger().info("[LegacyMeasurement] Cascade file: '" + str(self.cascade_file) + "'")
 
-        self.show_image_frame = self.declare_parameter("~show_image_frame", False).value
+        self.show_image_frame = self.declare_parameter("show_image_frame", False).value
         self.get_logger().info("[LegacyMeasurement] Show image frame: '" + str(self.show_image_frame) + "'")
 
         self.is_video = is_video
@@ -55,7 +55,9 @@ class LegacyMeasurement(Node):
 
     def on_image_frame(self, roi, timestamp):
         self.publish_count += 1
-        self.times.append(timestamp.to_sec())
+        # rclpy.time.Time -> seconds as float
+        t_sec = timestamp.nanoseconds * 1e-9
+        self.times.append(t_sec)
 
         # calculate mean green from roi
         green_mean = np.mean(self.extractGreenColorChannel(roi))
