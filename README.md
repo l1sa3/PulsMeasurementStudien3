@@ -54,6 +54,7 @@ pip install -r src/pulse_head_movement/requirements.txt
 Keep in mind: It can happen that a version defined in the requirements does not exist any more and is substituted by an api compatible newer version. In this case the versions numbers in the requirements have to be changed. 
 
 ### Industry Camera Driver (Basler pylon, ROS 2)
+If you just want to test the code only with a video file, you don’t need to follow the steps below.
 Download and install the pylon driver https://www.baslerweb.com/en/downloads/software/. (Version 7.2.1)
 If you are using the tar.gz installer and want to install into `/opt/pylon`, follow the steps from the provided `INSTALL` file (simplified here):
 ```sh
@@ -178,50 +179,9 @@ ros2 run pulse_head_movement pulse_head_movement \
 ```
 Replace `/home/<user>/TestTest.mp4` with the path to your own test video file.
 
-**Note**: The parts of this project below that use the Basler industry camera (pylon driver) or a webcam, as well as the comparison 
+**Note**: The parts of the project in the master branch that use the Basler industry camera (pylon driver) or a webcam, as well as the comparison 
 with the Polar H7 chest strap, could not be tested in this setup because no 
 industry camera, no webcam and no Polar H7 device were used at this time.
-
-### Run
-There are three ways to execute the measurement:
-1. Only display the measured values of the contactless method of head movement
-2. Compare the values from the contactless method with a ground truth from the polarH7 chest strap. 
-The pulse value from the polarH7 is measured in the pulse_chest_strap package.
-3. Compare the values from the contactless method with a ground truth from the MAHNOB HCI Tagging Database.
-
-#### Display pulse values only 
-If you only want to get the pulse values from the contactless head movement method, you have two possibilities:
-1. Print the pulse values to the console:
-    ```sh
-    source install/setup.bash
-    # Run one of the following launch files
-    # if you want to use the industry camera
-    roslaunch pulse_head_movement industry_camera.launch
-    # if you want to use the webcam
-    roslaunch pulse_head_movement webcam.launch
-    ```
-2. Show the pulse values in PlotJuggler:
-    ```sh
-    source install/setup.bash
-    # Run one of the following launch files
-    # if you want to use the industry camera 
-    roslaunch pulse_head_movement industry_camera.launch show_plot:=true
-    # if you want to use the webcam
-    roslaunch pulse_head_movement webcam.launch show_plot:=true
-    ```
-#### Compare pulse values with pulse values from polarH7
-For comparison, the results are always displayed in Plotjuggler, so the installation of Plotjuggler is necessary here. This is currently only supported for the webcam.
-```sh
-source install/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/pulse_chest_strap" topic_to_compare:="/pulse_head_movement"
-```
-#### Compare pulse values with a video from the MAHNOB HCI Tagging Database
-For comparison, the results are always displayed in Plotjuggler, so the installation of Plotjuggler is necessary here. This is currently only supported for the webcam.
-```sh
-source install/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/ecg" topic_to_compare:="/pulse_head_movement" video_file:="<path_to_video_file>" bdf_file="<path_to_bdf_file>"
-```
-
 
 ## Measure Pulse with Eulerian Motion Magnification (Changing Colour Intensity)
 
@@ -237,63 +197,5 @@ ros2 run eulerian_motion_magnification eulerian_motion_magnification \
 ```
 Replace `/home/<user>/TestTest.mp4` with the path to your own test video file.
 
-### Run
-This method can be run similarly to the head movement method:
-
-#### Display pulse values only 
-Only displaying the values from Eulerian Motion Magnification:
-```sh
-source install/setup.bash
-# Run one of the following launch files
-# if you want to use the industry camera
-roslaunch eulerian_motion_magnification industry_camera.launch
-# if you want to use the webcam
-roslaunch eulerian_motion_magnification webcam.launch
-```
-If you want to display the values in PlotJuggler, launch PlotJuggler and subscribe to topic ```eulerian_motion_magnification```
-
-#### Compare pulse values with pulse values from polarH7
-```sh
-source install/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/pulse_chest_strap" topic_to_compare:="/eulerian_motion_magnification"
-```
-
-#### Compare pulse values with a video from the MAHNOB HCI Tagging Database
-```sh
-source install/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/ecg" topic_to_compare:="/eulerian_motion_magnification" video_file:="<path_to_video_file>" bdf_file="<path_to_bdf_file>"
-```
-
 #### Show processed image
 If you want to display the processed image, set the launch argument to ```show_processed_image:=true```, it is false by default.
-
-## Measure Pulse with the legacy method
-
-This method was implemented by another team of students (https://github.com/MobMonRob/PulsMeasurementStudien) and integrated in ROS within this repository.
-
-### Run
-This method can be run similarly to the head movement method:
-
-#### Display pulse values only 
-Only displaying the values from legacy method:
-```sh
-source install/setup.bash
-# Run one of the following launch files
-# if you want to use the industry camera
-roslaunch legacy_measurement industry_camera.launch
-# if you want to use the webcam
-roslaunch legacy_measurement webcam.launch
-```
-If you want to display the values in PlotJuggler, launch PlotJuggler and subscribe to topic ```legacy_measurement```
-
-#### Compare pulse values with pulse values from polarH7
-```sh
-source devel/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/pulse_chest_strap" topic_to_compare:="/legacy_measurement"
-```
-
-#### Compare pulse values with a video from the MAHNOB HCI Tagging Database
-```sh
-source install devel/setup.bash
-roslaunch common compare_pulse_values.launch topic:="/ecg" topic_to_compare:="/legacy_measurement" video_file:="<path_to_video_file>" bdf_file="<path_to_bdf_file>"
-```
